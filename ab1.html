@@ -39,7 +39,7 @@
     }
     #game-container {
       position: relative;
-      box-shadow: 0 0 30px rgba(0, 150, 255, 0.3);
+      box-shadow: 0 0 35px rgba(0, 150, 255, 0.35);
       border: 2px solid #1a3a60;
       border-radius: 8px;
       overflow: hidden;
@@ -62,7 +62,7 @@
   <canvas id="gameCanvas" width="480" height="640"></canvas>
 </div>
 <div class="instructions">
-  操作: [矢印キー / WASD] 移動 ｜ [スペース] ショット ｜ [B / X] ボム ｜ マウス・タッチ操作にも対応
+  [矢印キー / WASD] 移動 ｜ [スペース] ショット ｜ [B / X] ボム ｜ マウス・タッチ操作対応
 </div>
 
 <script>
@@ -70,8 +70,12 @@
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
 
-  // --- Web Audio サウンド生成器 ---
+  // --- Web Audio サウンド & BGM ---
   let audioCtx = null;
+  let bgmTimer = null;
+  let bgmStep = 0;
+  let isBossBgm = false;
+
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -79,6 +83,11 @@
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
+    startBGM();
+  }
+
+  function midiToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
   }
 
   function playSound(type) {
@@ -91,53 +100,147 @@
 
     if (type === 'laser') {
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(800, now);
-      osc.frequency.exponentialRampToValueAtTime(150, now + 0.12);
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+      osc.frequency.setValueAtTime(850, now);
+      osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
       osc.start(now);
-      osc.stop(now + 0.12);
+      osc.stop(now + 0.1);
     } else if (type === 'explosion') {
       osc.type = 'square';
       osc.frequency.setValueAtTime(120, now);
-      osc.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+      osc.frequency.exponentialRampToValueAtTime(25, now + 0.28);
       gain.gain.setValueAtTime(0.3, now);
-      gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.28);
       osc.start(now);
-      osc.stop(now + 0.3);
+      osc.stop(now + 0.28);
     } else if (type === 'powerup') {
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(300, now);
-      osc.frequency.exponentialRampToValueAtTime(900, now + 0.2);
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(950, now + 0.2);
       gain.gain.setValueAtTime(0.2, now);
       gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
       osc.start(now);
       osc.stop(now + 0.2);
     } else if (type === 'bomb') {
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(80, now);
-      osc.frequency.exponentialRampToValueAtTime(10, now + 0.8);
-      gain.gain.setValueAtTime(0.5, now);
-      gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+      osc.frequency.setValueAtTime(90, now);
+      osc.frequency.exponentialRampToValueAtTime(10, now + 0.7);
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.7);
       osc.start(now);
-      osc.stop(now + 0.8);
+      osc.stop(now + 0.7);
+    } else if (type === 'clear') {
+      // ファンファーレ
+      const notes = [60, 64, 67, 72];
+      notes.forEach((n, i) => {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(midiToFreq(n), now + i * 0.12);
+        g.gain.setValueAtTime(0.2, now + i * 0.12);
+        g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.12 + 0.35);
+        o.connect(g);
+        g.connect(audioCtx.destination);
+        o.start(now + i * 0.12);
+        o.stop(now + i * 0.12 + 0.35);
+      });
     }
   }
 
+  // --- BGM パターン ---
+  const normalBass = [45, 45, 48, 45,  43, 43, 45, 43,  41, 41, 43, 41,  40, 40, 43, 45];
+  const normalArp  = [57, 60, 64, 67,  55, 59, 62, 65,  53, 57, 60, 64,  52, 55, 59, 64];
+  const bossBass   = [38, 38, 39, 38,  41, 38, 44, 43,  38, 38, 39, 38,  46, 45, 43, 41];
+  const bossLead   = [62, 65, 68, 65,  62, 68, 70, 68,  62, 65, 68, 74,  73, 70, 68, 65];
+
+  function playBgmTone(freq, type, duration, vol) {
+    if (!audioCtx || audioCtx.state !== 'running') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  }
+
+  function playHihat(vol) {
+    if (!audioCtx || audioCtx.state !== 'running') return;
+    const bufferSize = audioCtx.sampleRate * 0.04;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    noise.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start();
+  }
+
+  function startBGM() {
+    if (bgmTimer) return;
+    const stepInterval = isBossBgm ? 105 : 125;
+    bgmTimer = setInterval(() => {
+      if (state !== 'playing') return;
+
+      const idx = bgmStep % 16;
+      if (!isBossBgm) {
+        playBgmTone(midiToFreq(normalBass[idx]), 'sawtooth', 0.12, 0.05);
+        if (idx % 2 === 0) playBgmTone(midiToFreq(normalArp[idx]), 'sine', 0.16, 0.035);
+        if (idx % 2 === 1) playHihat(0.02);
+      } else {
+        playBgmTone(midiToFreq(bossBass[idx]), 'sawtooth', 0.1, 0.08);
+        playBgmTone(midiToFreq(bossLead[idx]), 'square', 0.09, 0.03);
+        playHihat(idx % 4 === 0 ? 0.04 : 0.015);
+      }
+      bgmStep++;
+    }, stepInterval);
+  }
+
+  function resetBgmTempo(toBoss) {
+    if (isBossBgm === toBoss) return;
+    isBossBgm = toBoss;
+    if (bgmTimer) {
+      clearInterval(bgmTimer);
+      bgmTimer = null;
+    }
+    startBGM();
+  }
+
   // --- ゲーム状態管理 ---
-  let state = 'title'; // 'title', 'playing', 'gameover'
+  let state = 'title'; // 'title', 'playing', 'stage_clear', 'gameover'
+  let currentStage = 1;
   let score = 0;
   let highScore = 0;
   let frame = 0;
+  let clearTimer = 0;
+  let stageBannerTimer = 0;
 
-  // 入力受付
+  // テーマ色（ステージごとに宇宙の背景色がシフト）
+  const stageThemes = [
+    { bg: '#040716', star: ['#ffffff', '#70d6ff', '#e9ff70'], nebula: '#002244' }, // Stage 1 (青)
+    { bg: '#10041c', star: ['#ffffff', '#ff70a6', '#c77dff'], nebula: '#33084d' }, // Stage 2 (紫)
+    { bg: '#180804', star: ['#ffffff', '#ff9f1c', '#ff4d6d'], nebula: '#4a1505' }, // Stage 3 (紅蓮)
+  ];
+
+  function getTheme() {
+    return stageThemes[(currentStage - 1) % stageThemes.length];
+  }
+
+  // 入力
   const keys = {};
   window.addEventListener('keydown', e => {
     initAudio();
     keys[e.code] = true;
-    if (state === 'title' && (e.code === 'Space' || e.code === 'Enter')) {
-      startGame();
-    } else if (state === 'gameover' && (e.code === 'Space' || e.code === 'Enter')) {
+    if ((state === 'title' || state === 'gameover') && (e.code === 'Space' || e.code === 'Enter')) {
       startGame();
     } else if (state === 'playing' && (e.code === 'KeyB' || e.code === 'KeyX')) {
       triggerBomb();
@@ -145,7 +248,6 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-  // タッチ/マウス操作
   let pointerActive = false;
   let pointerX = canvas.width / 2;
   let pointerY = canvas.height - 100;
@@ -162,7 +264,7 @@
 
   canvas.addEventListener('mousedown', e => {
     initAudio();
-    if (state !== 'playing') { startGame(); return; }
+    if (state === 'title' || state === 'gameover') { startGame(); return; }
     pointerActive = true;
     updatePointer(e);
   });
@@ -172,7 +274,7 @@
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     initAudio();
-    if (state !== 'playing') { startGame(); return; }
+    if (state === 'title' || state === 'gameover') { startGame(); return; }
     pointerActive = true;
     updatePointer(e);
   }, { passive: false });
@@ -182,19 +284,17 @@
   }, { passive: false });
   canvas.addEventListener('touchend', () => { pointerActive = false; });
 
-  // --- 星屑背景 ---
+  // 星背景
   const stars = [];
   for (let i = 0; i < 90; i++) {
     stars.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       size: Math.random() * 2 + 0.5,
-      speed: Math.random() * 2.5 + 0.5,
-      color: ['#fff', '#8cf', '#fd8'][Math.floor(Math.random() * 3)]
+      speed: Math.random() * 2.5 + 0.6
     });
   }
 
-  // --- ゲームオブジェクト ---
   let player;
   let bullets = [];
   let enemyBullets = [];
@@ -202,23 +302,33 @@
   let items = [];
   let particles = [];
   let boss = null;
+  let enemiesKilledInStage = 0;
+  const KILLS_FOR_BOSS = 15;
 
   class Player {
     constructor() {
       this.w = 32;
       this.h = 36;
       this.x = canvas.width / 2 - this.w / 2;
-      this.y = canvas.height - 80;
+      this.y = canvas.height - 90;
       this.speed = 5.5;
       this.hp = 100;
       this.maxHp = 100;
       this.bombs = 2;
-      this.power = 1; // 1: 通常, 2: 2連, 3: 3WAY
+      this.power = 1;
       this.shootCooldown = 0;
       this.invulnerable = 0;
+      this.warpSpeedY = 0; // クリア時の離脱用
     }
 
     update() {
+      if (state === 'stage_clear') {
+        // ハイパードライブワープ離脱
+        this.warpSpeedY = Math.min(25, this.warpSpeedY + 0.7);
+        this.y -= this.warpSpeedY;
+        return;
+      }
+
       if (pointerActive) {
         this.x += (pointerX - this.w / 2 - this.x) * 0.2;
         this.y += (pointerY - this.h / 2 - this.y) * 0.2;
@@ -229,11 +339,9 @@
         if (keys['ArrowDown'] || keys['KeyS']) this.y += this.speed;
       }
 
-      // 画面端制限
       this.x = Math.max(0, Math.min(canvas.width - this.w, this.x));
       this.y = Math.max(0, Math.min(canvas.height - this.h, this.y));
 
-      // 射撃 (スペースキーまたはポインター操作中)
       if (this.shootCooldown > 0) this.shootCooldown--;
       if ((keys['Space'] || pointerActive) && this.shootCooldown <= 0) {
         this.shoot();
@@ -259,19 +367,20 @@
     }
 
     draw() {
-      if (this.invulnerable % 6 >= 3) return; // 無敵点滅
+      if (this.invulnerable % 6 >= 3) return;
       ctx.save();
       ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
 
-      // エンジン噴射の炎
+      // ワープ離脱エフェクト
+      const flameLength = state === 'stage_clear' ? 35 + this.warpSpeedY * 2 : 10 + Math.random() * 8;
       ctx.beginPath();
       ctx.moveTo(-6, this.h / 2 - 4);
-      ctx.lineTo(0, this.h / 2 + 10 + Math.random() * 8);
+      ctx.lineTo(0, this.h / 2 + flameLength);
       ctx.lineTo(6, this.h / 2 - 4);
-      ctx.fillStyle = '#ff7700';
+      ctx.fillStyle = state === 'stage_clear' ? '#00e5ff' : '#ff7700';
       ctx.fill();
 
-      // 機体
+      // 機体本体
       ctx.beginPath();
       ctx.moveTo(0, -this.h / 2);
       ctx.lineTo(this.w / 2, this.h / 2);
@@ -339,27 +448,28 @@
 
   class Enemy {
     constructor(type) {
-      this.type = type; // 'scout', 'fighter'
+      this.type = type;
       this.w = type === 'scout' ? 24 : 36;
       this.h = type === 'scout' ? 24 : 34;
       this.x = Math.random() * (canvas.width - this.w);
       this.y = -this.h;
-      this.hp = type === 'scout' ? 1 : 4;
-      this.speed = type === 'scout' ? 3.2 : 1.8;
-      this.shootCooldown = Math.floor(Math.random() * 50) + 40;
-      this.angle = 0;
+      // ステージが進むと敵HP・速度アップ
+      this.hp = (type === 'scout' ? 1 : 4) + Math.floor((currentStage - 1) * 0.7);
+      this.speed = (type === 'scout' ? 3.2 : 1.8) + (currentStage - 1) * 0.25;
+      this.shootCooldown = Math.max(30, Math.floor(Math.random() * 50) + 40 - currentStage * 4);
     }
 
     update() {
       this.y += this.speed;
       if (this.type === 'scout') {
-        this.x += Math.sin(this.y * 0.05) * 2;
+        this.x += Math.sin(this.y * 0.05) * 2.2;
       } else if (this.type === 'fighter') {
         this.shootCooldown--;
         if (this.shootCooldown <= 0) {
+          const bulletSpeed = 3.6 + (currentStage - 1) * 0.3;
           const angle = Math.atan2((player.y - this.y), (player.x - this.x));
-          enemyBullets.push(new EnemyBullet(this.x + this.w / 2, this.y + this.h, Math.cos(angle) * 3.5, Math.sin(angle) * 3.5));
-          this.shootCooldown = 70;
+          enemyBullets.push(new EnemyBullet(this.x + this.w / 2, this.y + this.h, Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed));
+          this.shootCooldown = Math.max(35, 70 - currentStage * 5);
         }
       }
     }
@@ -390,15 +500,17 @@
 
   class Boss {
     constructor() {
-      this.w = 90;
-      this.h = 60;
+      this.w = 100;
+      this.h = 65;
       this.x = canvas.width / 2 - this.w / 2;
       this.y = -this.h;
-      this.targetY = 70;
-      this.hp = 80;
-      this.maxHp = 80;
-      this.speedX = 2;
+      this.targetY = 75;
+      // ステージごとにボスHPと行動速度が増加
+      this.maxHp = 70 + currentStage * 30;
+      this.hp = this.maxHp;
+      this.speedX = 2 + (currentStage - 1) * 0.4;
       this.shootTimer = 0;
+      resetBgmTempo(true);
     }
 
     update() {
@@ -411,11 +523,15 @@
         }
 
         this.shootTimer++;
-        if (this.shootTimer % 45 === 0) {
-          // 3連拡散弾
+        const attackInterval = Math.max(25, 45 - currentStage * 4);
+        if (this.shootTimer % attackInterval === 0) {
           const cx = this.x + this.w / 2;
           const cy = this.y + this.h;
-          for (let a = -0.4; a <= 0.4; a += 0.4) {
+          // ステージが上がると拡散弾数増加
+          const spreadCount = currentStage >= 3 ? 5 : 3;
+          const maxSpread = 0.4 + (currentStage - 1) * 0.1;
+          const step = (maxSpread * 2) / (spreadCount - 1);
+          for (let a = -maxSpread; a <= maxSpread + 0.01; a += step) {
             enemyBullets.push(new EnemyBullet(cx, cy, Math.sin(a) * 4, Math.cos(a) * 4));
           }
         }
@@ -432,24 +548,24 @@
       ctx.lineTo(-this.w / 3, -this.h / 2);
       ctx.lineTo(-this.w / 2, 0);
       ctx.closePath();
-      ctx.fillStyle = '#9b51e0';
-      ctx.shadowColor = '#d070ff';
-      ctx.shadowBlur = 15;
+      ctx.fillStyle = currentStage % 2 === 0 ? '#ff0077' : '#9b51e0';
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 18;
       ctx.fill();
 
       // コア
       ctx.beginPath();
-      ctx.arc(0, 0, 10, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff0055';
+      ctx.arc(0, 0, 12, 0, Math.PI * 2);
+      ctx.fillStyle = '#00ffff';
       ctx.fill();
       ctx.restore();
 
       // ボスHPバー
       const barW = canvas.width - 60;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(30, 20, barW, 8);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(30, 22, barW, 10);
       ctx.fillStyle = '#ff2a6d';
-      ctx.fillRect(30, 20, (this.hp / this.maxHp) * barW, 8);
+      ctx.fillRect(30, 22, Math.max(0, (this.hp / this.maxHp) * barW), 10);
     }
   }
 
@@ -514,9 +630,7 @@
     player.bombs--;
     playSound('bomb');
 
-    // 画面内敵弾消去
     enemyBullets = [];
-    // 敵に大ダメージ
     enemies.forEach(e => {
       e.hp -= 10;
       spawnExplosion(e.x + e.w / 2, e.y + e.h / 2, '#fff', 10);
@@ -526,7 +640,6 @@
       spawnExplosion(boss.x + boss.w / 2, boss.y + boss.h / 2, '#fff', 20);
     }
 
-    // フラッシュ演出
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -541,6 +654,9 @@
   }
 
   function startGame() {
+    currentStage = 1;
+    score = 0;
+    frame = 0;
     player = new Player();
     bullets = [];
     enemyBullets = [];
@@ -548,23 +664,47 @@
     items = [];
     particles = [];
     boss = null;
-    score = 0;
-    frame = 0;
+    enemiesKilledInStage = 0;
+    stageBannerTimer = 120;
+    resetBgmTempo(false);
     state = 'playing';
   }
 
-  // --- メインループ ---
+  function startNextStage() {
+    currentStage++;
+    enemiesKilledInStage = 0;
+    boss = null;
+    enemyBullets = [];
+    bullets = [];
+    items = [];
+    // クリアボーナスと補充
+    player.hp = player.maxHp;
+    player.bombs = Math.min(3, player.bombs + 1);
+    player.x = canvas.width / 2 - player.w / 2;
+    player.y = canvas.height - 90;
+    player.warpSpeedY = 0;
+    player.invulnerable = 60;
+    stageBannerTimer = 120;
+    resetBgmTempo(false);
+    state = 'playing';
+  }
+
+  // --- ゲームループ ---
   function loop() {
     frame++;
 
-    // 背景描画（星屑）
-    ctx.fillStyle = '#060814';
+    // 背景描画（ステージごとのテーマ色）
+    const theme = getTheme();
+    ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 星屑流速
+    const starSpeedMultiplier = state === 'stage_clear' ? 5 : 1;
     stars.forEach(s => {
-      s.y += s.speed;
+      s.y += s.speed * starSpeedMultiplier;
       if (s.y > canvas.height) s.y = 0;
-      ctx.fillStyle = s.color;
-      ctx.fillRect(s.x, s.y, s.size, s.size);
+      ctx.fillStyle = theme.star[Math.floor((s.speed * 10) % theme.star.length)];
+      ctx.fillRect(s.x, s.y, s.size, state === 'stage_clear' ? s.size * 3 : s.size);
     });
 
     if (state === 'title') {
@@ -572,6 +712,10 @@
     } else if (state === 'playing') {
       updateGame();
       drawGame();
+    } else if (state === 'stage_clear') {
+      updateStageClear();
+      drawGame();
+      drawStageClearScreen();
     } else if (state === 'gameover') {
       drawGameOverScreen();
     }
@@ -582,15 +726,15 @@
   function updateGame() {
     player.update();
 
-    // 敵スポーン
-    if (!boss && score >= 2000 && score % 2000 < 100) {
+    // 雑魚敵を規定数倒したらボスが出現
+    if (!boss && enemiesKilledInStage >= KILLS_FOR_BOSS) {
       boss = new Boss();
     } else if (!boss && frame % 45 === 0) {
       const type = Math.random() < 0.65 ? 'scout' : 'fighter';
       enemies.push(new Enemy(type));
     }
 
-    // 自機弾更新
+    // 弾更新
     bullets.forEach((b, bi) => {
       b.update();
       if (b.y < -20) bullets.splice(bi, 1);
@@ -603,7 +747,6 @@
         enemyBullets.splice(ebi, 1);
         return;
       }
-      // プレイヤーとの当たり判定
       if (player.invulnerable <= 0 && checkCollision(eb, player)) {
         player.hp -= 20;
         player.invulnerable = 40;
@@ -611,12 +754,13 @@
         enemyBullets.splice(ebi, 1);
         if (player.hp <= 0) {
           state = 'gameover';
+          resetBgmTempo(false);
           if (score > highScore) highScore = score;
         }
       }
     });
 
-    // 敵更新 & 衝突判定
+    // 敵更新
     enemies.forEach((e, ei) => {
       e.update();
       if (e.y > canvas.height + 50) {
@@ -624,7 +768,6 @@
         return;
       }
 
-      // 弾と敵
       bullets.forEach((b, bi) => {
         if (checkCollision(b, e)) {
           e.hp--;
@@ -632,13 +775,13 @@
           if (e.hp <= 0) {
             spawnExplosion(e.x + e.w / 2, e.y + e.h / 2);
             score += e.type === 'scout' ? 100 : 250;
+            enemiesKilledInStage++;
             if (Math.random() < 0.25) items.push(new Item(e.x + e.w / 2, e.y + e.h / 2));
             enemies.splice(ei, 1);
           }
         }
       });
 
-      // プレイヤーと敵の直接衝突
       if (player.invulnerable <= 0 && checkCollision(e, player)) {
         player.hp -= 30;
         player.invulnerable = 40;
@@ -647,6 +790,7 @@
         enemies.splice(ei, 1);
         if (player.hp <= 0) {
           state = 'gameover';
+          resetBgmTempo(false);
           if (score > highScore) highScore = score;
         }
       }
@@ -660,16 +804,27 @@
           boss.hp--;
           bullets.splice(bi, 1);
           if (boss.hp <= 0) {
-            spawnExplosion(boss.x + boss.w / 2, boss.y + boss.h / 2, '#ff00ff', 40);
-            score += 1500;
-            items.push(new Item(boss.x + boss.w / 2, boss.y + boss.h / 2));
+            // ボス撃破！ステージクリアへ移行
+            spawnExplosion(boss.x + boss.w / 2, boss.y + boss.h / 2, '#ff00ff', 50);
+            playSound('clear');
+            score += 2000 * currentStage;
             boss = null;
+            enemyBullets = [];
+            enemies = [];
+
+            // クリアボーナス加算
+            const shieldBonus = player.hp * 10;
+            const bombBonus = player.bombs * 500;
+            score += shieldBonus + bombBonus;
+
+            state = 'stage_clear';
+            clearTimer = 180; // 約3秒のクリア演出
           }
         }
       });
     }
 
-    // アイテム更新 & 取得
+    // アイテム
     items.forEach((item, ii) => {
       item.update();
       if (item.y > canvas.height + 20) {
@@ -687,11 +842,23 @@
       }
     });
 
-    // パーティクル更新
     particles.forEach((p, pi) => {
       p.update();
       if (p.life <= 0) particles.splice(pi, 1);
     });
+  }
+
+  function updateStageClear() {
+    player.update();
+    particles.forEach((p, pi) => {
+      p.update();
+      if (p.life <= 0) particles.splice(pi, 1);
+    });
+
+    clearTimer--;
+    if (clearTimer <= 0) {
+      startNextStage();
+    }
   }
 
   function drawGame() {
@@ -705,9 +872,9 @@
 
     // UIオーバーレイ
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = 'bold 15px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`SCORE: ${score}`, 16, 28);
+    ctx.fillText(`STAGE ${currentStage}  |  SCORE: ${score}`, 16, 28);
     ctx.textAlign = 'right';
     ctx.fillText(`BOMB: ${'💣'.repeat(player.bombs)}`, canvas.width - 16, 28);
 
@@ -719,6 +886,41 @@
     ctx.fillRect(70, 40, 100, 12);
     ctx.fillStyle = player.hp > 30 ? '#00e5ff' : '#ff2a6d';
     ctx.fillRect(70, 40, Math.max(0, player.hp), 12);
+
+    // ボス出現までのキル数インジケーター（ボス不在時）
+    if (!boss && state === 'playing') {
+      const remain = Math.max(0, KILLS_FOR_BOSS - enemiesKilledInStage);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#aaa';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(`BOSS WARNING: あと ${remain} 機`, canvas.width - 16, 50);
+    }
+
+    // ステージ開始時の「STAGE X START」アナウンス
+    if (stageBannerTimer > 0) {
+      stageBannerTimer--;
+      ctx.fillStyle = `rgba(0, 229, 255, ${Math.min(1, stageBannerTimer / 40)})`;
+      ctx.font = 'bold 32px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`STAGE ${currentStage} START`, canvas.width / 2, canvas.height / 2 - 20);
+    }
+  }
+
+  function drawStageClearScreen() {
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur = 15;
+    ctx.fillText(`STAGE ${currentStage} CLEAR!`, canvas.width / 2, canvas.height / 2 - 40);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.fillText('WARP TO NEXT SECTOR...', canvas.width / 2, canvas.height / 2 + 10);
+    ctx.fillStyle = '#ffe600';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('+ シールド全快 & ボム補給 +', canvas.width / 2, canvas.height / 2 + 45);
   }
 
   function drawTitleScreen() {
@@ -747,15 +949,15 @@
 
     ctx.fillStyle = '#fff';
     ctx.font = '20px sans-serif';
-    ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2 - 10);
-    ctx.fillText(`ハイスコア: ${highScore}`, canvas.width / 2, canvas.height / 2 + 25);
+    ctx.fillText(`到達ステージ: STAGE ${currentStage}`, canvas.width / 2, canvas.height / 2 - 15);
+    ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2 + 15);
+    ctx.fillText(`ハイスコア: ${highScore}`, canvas.width / 2, canvas.height / 2 + 45);
 
     ctx.fillStyle = '#00e5ff';
     ctx.font = '16px sans-serif';
-    ctx.fillText('スペースキー または クリックでリトライ', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.fillText('スペースキー または クリックでリトライ', canvas.width / 2, canvas.height / 2 + 95);
   }
 
-  // ループ開始
   loop();
 })();
 </script>
