@@ -1,0 +1,792 @@
+
+                        <!DOCTYPE html>
+                        <html lang="en">
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+							<style>
+								body {
+									background-color: white; /* Ensure the iframe has a white background */
+								}
+
+								
+							</style>
+                        </head>
+                        <body>
+                            <!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Catris - にゃんこパズル</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      background: radial-gradient(circle at center, #2b2236 0%, #130f1a 100%);
+      color: #fff;
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      overflow-x: hidden;
+    }
+    h1 {
+      font-size: 1.8rem;
+      letter-spacing: 3px;
+      margin-bottom: 12px;
+      color: #ff9ebb;
+      text-shadow: 0 0 12px rgba(255, 158, 187, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .game-container {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 16px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      border: 2px solid rgba(255, 158, 187, 0.2);
+      position: relative;
+    }
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: 105px;
+    }
+    .panel-box {
+      background: rgba(18, 13, 26, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 8px;
+      text-align: center;
+    }
+    .panel-title {
+      font-size: 0.75rem;
+      color: #ffb8cf;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+    .panel-value {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: #ffe680;
+      text-shadow: 0 0 6px rgba(255, 230, 128, 0.4);
+    }
+    canvas {
+      display: block;
+      background-color: #120e1a;
+      border-radius: 10px;
+    }
+    #board {
+      border: 2px solid rgba(255, 158, 187, 0.4);
+      box-shadow: 0 0 18px rgba(255, 158, 187, 0.2);
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 10, 22, 0.88);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border-radius: 14px;
+      backdrop-filter: blur(5px);
+      z-index: 10;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .overlay h2 {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      color: #ff5e7e;
+      text-shadow: 0 0 10px rgba(255, 94, 126, 0.7);
+    }
+    .btn {
+      background: linear-gradient(135deg, #ff7b99, #ff5376);
+      color: #fff;
+      border: none;
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255, 123, 153, 0.4);
+      transition: transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.96);
+    }
+    /* スマホ操作用 */
+    .touch-controls {
+      display: none;
+      margin-top: 14px;
+      width: 100%;
+      max-width: 360px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .touch-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 1.2rem;
+      padding: 14px 0;
+      border-radius: 10px;
+      touch-action: manipulation;
+    }
+    .touch-btn:active {
+      background: rgba(255, 123, 153, 0.4);
+    }
+    @media (max-width: 600px) {
+      .touch-controls {
+        display: grid;
+      }
+    }
+    .instructions {
+      margin-top: 14px;
+      font-size: 0.8rem;
+      color: #aaa;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🐾 にゃんこパズル 🐾</h1>
+
+  <div class="game-container">
+    <!-- 左パネル: HOLD / LEVEL / LINES -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <div class="panel-title">HOLD</div>
+        <canvas id="holdCanvas" width="88" height="88"></canvas>
+      </div>
+      <div class="panel-box">
+        <div class="panel-title">LEVEL</div>
+        <div class="panel-value" id="level">1</div>
+      </div>
+      <div class="panel-box">
+        <div class="panel-title">LINES</div>
+        <div class="panel-value" id="lines">0</div>
+      </div>
+    </div>
+
+    <!-- メイン盤面 -->
+    <canvas id="board" width="260" height="520"></canvas>
+
+    <!-- 右パネル: NEXT / SCORE / PAUSE -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <div class="panel-title">NEXT</div>
+        <canvas id="nextCanvas" width="88" height="88"></canvas>
+      </div>
+      <div class="panel-box">
+        <div class="panel-title">SCORE</div>
+        <div class="panel-value" id="score">0</div>
+      </div>
+      <button class="btn" id="pauseBtn" style="padding: 7px 10px; font-size: 0.8rem;">一時停止</button>
+    </div>
+
+    <!-- ゲームオーバー画面 -->
+    <div class="overlay hidden" id="gameOverOverlay">
+      <h2>GAME OVER</h2>
+      <p style="margin-bottom: 16px; color: #eee;">スコア: <span id="finalScore">0</span></p>
+      <button class="btn" id="restartBtn">もう一度遊ぶ 🐾</button>
+    </div>
+  </div>
+
+  <!-- スマホ向けタッチボタン -->
+  <div class="touch-controls">
+    <button class="touch-btn" id="btnHold">HOLD</button>
+    <button class="touch-btn" id="btnRotate">回転</button>
+    <button class="touch-btn" id="btnDrop">急降下</button>
+    <button class="touch-btn" id="btnLeft">←</button>
+    <button class="touch-btn" id="btnDown">↓</button>
+    <button class="touch-btn" id="btnRight">→</button>
+  </div>
+
+  <div class="instructions">
+    [← / →]: 移動 | [↑ / X]: 回転 | [↓]: 高速落下 | [Space]: ハードドロップ<br>
+    [C / Shift]: ホールド | [P]: ポーズ
+  </div>
+
+  <script>
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK_SIZE = 26; // 猫の顔が潰れないよう少し大きめに
+
+    // にゃんこの毛色カラーパレット
+    const CAT_COLORS = {
+      I: { main: '#7adbf0', innerEar: '#ffb3c6', eyes: '#1c3144' }, // 水色猫
+      J: { main: '#6d8ff7', innerEar: '#ffa6bf', eyes: '#181b36' }, // 青猫
+      L: { main: '#fca253', innerEar: '#ffe0b2', eyes: '#3d2008' }, // 茶トラ猫
+      O: { main: '#ffd24c', innerEar: '#ffe699', eyes: '#422800' }, // 黄色猫
+      S: { main: '#7ce082', innerEar: '#ffc1d3', eyes: '#153318' }, // ミント猫
+      T: { main: '#c97ef7', innerEar: '#f9c5e8', eyes: '#32103f' }, // 紫猫
+      Z: { main: '#ff6f7d', innerEar: '#ffd0d6', eyes: '#421117' }  // ピンク猫
+    };
+
+    const SHAPES = {
+      I: [
+        [0, 0, 0, 0],
+        [1, 1, 1, 1],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0]
+      ],
+      J: [
+        [1, 0, 0],
+        [1, 1, 1],
+        [0, 0, 0]
+      ],
+      L: [
+        [0, 0, 1],
+        [1, 1, 1],
+        [0, 0, 0]
+      ],
+      O: [
+        [1, 1],
+        [1, 1]
+      ],
+      S: [
+        [0, 1, 1],
+        [1, 1, 0],
+        [0, 0, 0]
+      ],
+      T: [
+        [0, 1, 0],
+        [1, 1, 1],
+        [0, 0, 0]
+      ],
+      Z: [
+        [1, 1, 0],
+        [0, 1, 1],
+        [0, 0, 0]
+      ]
+    };
+
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const nextCanvas = document.getElementById('nextCanvas');
+    const nextCtx = nextCanvas.getContext('2d');
+    const holdCanvas = document.getElementById('holdCanvas');
+    const holdCtx = holdCanvas.getContext('2d');
+
+    const scoreElem = document.getElementById('score');
+    const linesElem = document.getElementById('lines');
+    const levelElem = document.getElementById('level');
+    const finalScoreElem = document.getElementById('finalScore');
+    const gameOverOverlay = document.getElementById('gameOverOverlay');
+    const restartBtn = document.getElementById('restartBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    let grid = createGrid();
+    let bag = [];
+    let currentPiece = null;
+    let nextPiece = null;
+    let holdPiece = null;
+    let canHold = true;
+
+    let score = 0;
+    let lines = 0;
+    let level = 1;
+
+    let dropCounter = 0;
+    let dropInterval = 1000;
+    let lastTime = 0;
+    let isGameOver = false;
+    let isPaused = false;
+
+    function createGrid() {
+      return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    }
+
+    function getNextPiece() {
+      if (bag.length === 0) {
+        bag = Object.keys(SHAPES);
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j], bag[i]];
+        }
+      }
+      const type = bag.pop();
+      return {
+        type: type,
+        shape: SHAPES[type].map(row => [...row]),
+        x: Math.floor(COLS / 2) - Math.ceil(SHAPES[type][0].length / 2),
+        y: 0
+      };
+    }
+
+    function collide(grid, piece, offsetX = 0, offsetY = 0, newShape = null) {
+      const shape = newShape || piece.shape;
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (shape[r][c]) {
+            const newX = piece.x + c + offsetX;
+            const newY = piece.y + r + offsetY;
+
+            if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
+            if (newY >= 0 && grid[newY][newX]) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function rotate(shape) {
+      const N = shape.length;
+      const result = Array.from({ length: N }, () => Array(N).fill(0));
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          result[c][N - 1 - r] = shape[r][c];
+        }
+      }
+      return result;
+    }
+
+    function playerRotate() {
+      if (isGameOver || isPaused) return;
+      const rotated = rotate(currentPiece.shape);
+      const kicks = [0, -1, 1, -2, 2];
+      for (const kick of kicks) {
+        if (!collide(grid, currentPiece, kick, 0, rotated)) {
+          currentPiece.x += kick;
+          currentPiece.shape = rotated;
+          return;
+        }
+      }
+    }
+
+    function playerMove(dir) {
+      if (isGameOver || isPaused) return;
+      if (!collide(grid, currentPiece, dir, 0)) {
+        currentPiece.x += dir;
+      }
+    }
+
+    function playerDrop() {
+      if (isGameOver || isPaused) return;
+      if (!collide(grid, currentPiece, 0, 1)) {
+        currentPiece.y++;
+        dropCounter = 0;
+      } else {
+        lockPiece();
+      }
+    }
+
+    function playerHardDrop() {
+      if (isGameOver || isPaused) return;
+      while (!collide(grid, currentPiece, 0, 1)) {
+        currentPiece.y++;
+        score += 2;
+      }
+      lockPiece();
+    }
+
+    function playerHold() {
+      if (!canHold || isGameOver || isPaused) return;
+      if (!holdPiece) {
+        holdPiece = currentPiece.type;
+        currentPiece = nextPiece;
+        nextPiece = getNextPiece();
+      } else {
+        const temp = holdPiece;
+        holdPiece = currentPiece.type;
+        currentPiece = {
+          type: temp,
+          shape: SHAPES[temp].map(row => [...row]),
+          x: Math.floor(COLS / 2) - Math.ceil(SHAPES[temp][0].length / 2),
+          y: 0
+        };
+      }
+      canHold = false;
+      drawMini(holdCtx, holdPiece);
+      drawMini(nextCtx, nextPiece.type);
+    }
+
+    function lockPiece() {
+      for (let r = 0; r < currentPiece.shape.length; r++) {
+        for (let c = 0; c < currentPiece.shape[r].length; c++) {
+          if (currentPiece.shape[r][c]) {
+            const boardY = currentPiece.y + r;
+            const boardX = currentPiece.x + c;
+            if (boardY < 0) {
+              gameOver();
+              return;
+            }
+            grid[boardY][boardX] = currentPiece.type;
+          }
+        }
+      }
+
+      clearLines();
+      currentPiece = nextPiece;
+      nextPiece = getNextPiece();
+      canHold = true;
+
+      if (collide(grid, currentPiece)) {
+        gameOver();
+      }
+
+      drawMini(nextCtx, nextPiece.type);
+      dropCounter = 0;
+    }
+
+    function clearLines() {
+      let linesCleared = 0;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (grid[r].every(cell => cell !== 0)) {
+          grid.splice(r, 1);
+          grid.unshift(Array(COLS).fill(0));
+          linesCleared++;
+          r++;
+        }
+      }
+
+      if (linesCleared > 0) {
+        const points = [0, 100, 300, 500, 800];
+        score += points[linesCleared] * level;
+        lines += linesCleared;
+        level = Math.floor(lines / 10) + 1;
+        dropInterval = Math.max(100, 1000 - (level - 1) * 80);
+
+        scoreElem.innerText = score;
+        linesElem.innerText = lines;
+        levelElem.innerText = level;
+      }
+    }
+
+    // ==========================================
+    // 🐾 猫の顔を描く描画関数 (Cat Block Renderer)
+    // ==========================================
+    function drawCatFace(ctx, x, y, size, type, isGhost = false) {
+      const colors = CAT_COLORS[type];
+      const px = x * size;
+      const py = y * size;
+
+      ctx.save();
+      ctx.translate(px, py);
+
+      if (isGhost) {
+        ctx.globalAlpha = 0.28;
+      }
+
+      // --- 1. 左耳・右耳 ---
+      ctx.fillStyle = colors.main;
+      // 左耳
+      ctx.beginPath();
+      ctx.moveTo(size * 0.16, size * 0.45);
+      ctx.lineTo(size * 0.14, size * 0.1);
+      ctx.lineTo(size * 0.44, size * 0.25);
+      ctx.closePath();
+      ctx.fill();
+
+      // 右耳
+      ctx.beginPath();
+      ctx.moveTo(size * 0.84, size * 0.45);
+      ctx.lineTo(size * 0.86, size * 0.1);
+      ctx.lineTo(size * 0.56, size * 0.25);
+      ctx.closePath();
+      ctx.fill();
+
+      if (!isGhost) {
+        // 耳の内側（ピンク）
+        ctx.fillStyle = colors.innerEar;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.22, size * 0.4);
+        ctx.lineTo(size * 0.20, size * 0.18);
+        ctx.lineTo(size * 0.38, size * 0.28);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(size * 0.78, size * 0.4);
+        ctx.lineTo(size * 0.80, size * 0.18);
+        ctx.lineTo(size * 0.62, size * 0.28);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // --- 2. まあるい輪郭（顔のベース） ---
+      ctx.fillStyle = colors.main;
+      ctx.beginPath();
+      // 少し横長で丸っこい顔
+      ctx.ellipse(size * 0.5, size * 0.58, size * 0.44, size * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ぷっくりハイライト（頭のてっぺん）
+      if (!isGhost) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(size * 0.5, size * 0.34, size * 0.22, size * 0.08, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // --- 3. 目 ---
+      if (!isGhost) {
+        ctx.fillStyle = colors.eyes;
+        // 左目
+        ctx.beginPath();
+        ctx.arc(size * 0.35, size * 0.54, size * 0.075, 0, Math.PI * 2);
+        ctx.fill();
+        // 右目
+        ctx.beginPath();
+        ctx.arc(size * 0.65, size * 0.54, size * 0.075, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 目のハイライト（白）
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(size * 0.33, size * 0.52, size * 0.028, 0, Math.PI * 2);
+        ctx.arc(size * 0.63, size * 0.52, size * 0.028, 0, Math.PI * 2);
+        ctx.fill();
+
+        // --- 4. 鼻（ちっちゃなピンク三角） ---
+        ctx.fillStyle = '#ff8fab';
+        ctx.beginPath();
+        ctx.moveTo(size * 0.47, size * 0.63);
+        ctx.lineTo(size * 0.53, size * 0.63);
+        ctx.lineTo(size * 0.50, size * 0.67);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- 5. お口（ω の形） ---
+        ctx.strokeStyle = colors.eyes;
+        ctx.lineWidth = Math.max(1, size * 0.04);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        // 左カーブ
+        ctx.arc(size * 0.45, size * 0.70, size * 0.05, 0.1 * Math.PI, 0.9 * Math.PI);
+        // 右カーブ
+        ctx.arc(size * 0.55, size * 0.70, size * 0.05, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.stroke();
+
+        // --- 6. ヒゲ（左右2本ずつ） ---
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1;
+        // 左ヒゲ
+        ctx.beginPath();
+        ctx.moveTo(size * 0.22, size * 0.62);
+        ctx.lineTo(size * 0.05, size * 0.60);
+        ctx.moveTo(size * 0.22, size * 0.70);
+        ctx.lineTo(size * 0.06, size * 0.73);
+        // 右ヒゲ
+        ctx.moveTo(size * 0.78, size * 0.62);
+        ctx.lineTo(size * 0.95, size * 0.60);
+        ctx.moveTo(size * 0.78, size * 0.70);
+        ctx.lineTo(size * 0.94, size * 0.73);
+        ctx.stroke();
+
+        // ほっぺ（ほんのりチーク）
+        ctx.fillStyle = 'rgba(255, 120, 160, 0.35)';
+        ctx.beginPath();
+        ctx.arc(size * 0.24, size * 0.64, size * 0.07, 0, Math.PI * 2);
+        ctx.arc(size * 0.76, size * 0.64, size * 0.07, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function drawMini(ctx, type) {
+      ctx.clearRect(0, 0, 88, 88);
+      if (!type) return;
+      const shape = SHAPES[type];
+      const miniSize = 19;
+      const offsetX = Math.floor((88 - shape[0].length * miniSize) / 2);
+      const offsetY = Math.floor((88 - shape.length * miniSize) / 2);
+
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (shape[r][c]) {
+            drawCatFace(ctx, (offsetX / miniSize) + c, (offsetY / miniSize) + r, miniSize, type);
+          }
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 背景グリッド（肉球ドット風の薄い線）
+      ctx.strokeStyle = 'rgba(255, 158, 187, 0.06)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= COLS; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * BLOCK_SIZE, 0);
+        ctx.lineTo(x * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= ROWS; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * BLOCK_SIZE);
+        ctx.lineTo(COLS * BLOCK_SIZE, y * BLOCK_SIZE);
+        ctx.stroke();
+      }
+
+      // 固定されたにゃんこ達
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (grid[r][c]) {
+            drawCatFace(ctx, c, r, BLOCK_SIZE, grid[r][c]);
+          }
+        }
+      }
+
+      if (currentPiece) {
+        // おばけ猫（落下予測ゴースト）
+        let ghostY = 0;
+        while (!collide(grid, currentPiece, 0, ghostY + 1)) {
+          ghostY++;
+        }
+        for (let r = 0; r < currentPiece.shape.length; r++) {
+          for (let c = 0; c < currentPiece.shape[r].length; c++) {
+            if (currentPiece.shape[r][c]) {
+              drawCatFace(ctx, currentPiece.x + c, currentPiece.y + ghostY + r, BLOCK_SIZE, currentPiece.type, true);
+            }
+          }
+        }
+
+        // 操作中のにゃんこピース
+        for (let r = 0; r < currentPiece.shape.length; r++) {
+          for (let c = 0; c < currentPiece.shape[r].length; c++) {
+            if (currentPiece.shape[r][c]) {
+              drawCatFace(ctx, currentPiece.x + c, currentPiece.y + r, BLOCK_SIZE, currentPiece.type);
+            }
+          }
+        }
+      }
+    }
+
+    function update(time = 0) {
+      if (isGameOver) return;
+      const deltaTime = time - lastTime;
+      lastTime = time;
+
+      if (!isPaused) {
+        dropCounter += deltaTime;
+        if (dropCounter > dropInterval) {
+          playerDrop();
+        }
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function gameOver() {
+      isGameOver = true;
+      finalScoreElem.innerText = score;
+      gameOverOverlay.classList.remove('hidden');
+    }
+
+    function resetGame() {
+      grid = createGrid();
+      bag = [];
+      score = 0;
+      lines = 0;
+      level = 1;
+      dropInterval = 1000;
+      dropCounter = 0;
+      holdPiece = null;
+      canHold = true;
+      isGameOver = false;
+      isPaused = false;
+
+      scoreElem.innerText = 0;
+      linesElem.innerText = 0;
+      levelElem.innerText = 1;
+      gameOverOverlay.classList.add('hidden');
+      pauseBtn.innerText = '一時停止';
+
+      holdCtx.clearRect(0, 0, 88, 88);
+      currentPiece = getNextPiece();
+      nextPiece = getNextPiece();
+      drawMini(nextCtx, nextPiece.type);
+
+      lastTime = performance.now();
+      requestAnimationFrame(update);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+
+      if (e.code === 'KeyP') {
+        togglePause();
+        return;
+      }
+
+      if (isGameOver || isPaused) return;
+
+      switch (e.code) {
+        case 'ArrowLeft':
+          playerMove(-1);
+          break;
+        case 'ArrowRight':
+          playerMove(1);
+          break;
+        case 'ArrowDown':
+          playerDrop();
+          score += 1;
+          scoreElem.innerText = score;
+          break;
+        case 'ArrowUp':
+        case 'KeyX':
+          playerRotate();
+          break;
+        case 'Space':
+          playerHardDrop();
+          break;
+        case 'KeyC':
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          playerHold();
+          break;
+      }
+    });
+
+    function togglePause() {
+      if (isGameOver) return;
+      isPaused = !isPaused;
+      pauseBtn.innerText = isPaused ? '再開' : '一時停止';
+    }
+
+    pauseBtn.addEventListener('click', togglePause);
+    restartBtn.addEventListener('click', resetGame);
+
+    document.getElementById('btnLeft').addEventListener('click', () => playerMove(-1));
+    document.getElementById('btnRight').addEventListener('click', () => playerMove(1));
+    document.getElementById('btnDown').addEventListener('click', () => playerDrop());
+    document.getElementById('btnRotate').addEventListener('click', () => playerRotate());
+    document.getElementById('btnDrop').addEventListener('click', () => playerHardDrop());
+    document.getElementById('btnHold').addEventListener('click', () => playerHold());
+
+    resetGame();
+  </script>
+</body>
+</html>
+
+							<script>
+                            	
+							</script>
+                        </body>
+                        </html>
+                    
